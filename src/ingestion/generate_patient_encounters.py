@@ -5,6 +5,10 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 
 
+# ============================================================
+# Configuration
+# ============================================================
+
 DATABASE_URL = (
     "postgresql+psycopg2://sattwik@localhost:5432/healthcare_operations"
 )
@@ -18,10 +22,18 @@ NUM_ENCOUNTERS = 100_000
 random.seed(RANDOM_SEED)
 
 
+# ============================================================
+# Database connection
+# ============================================================
+
 print("Connecting to PostgreSQL...")
 
 engine = create_engine(DATABASE_URL)
 
+
+# ============================================================
+# Load hospital capacity profiles
+# ============================================================
 
 print("Loading hospital capacity profiles...")
 
@@ -52,6 +64,10 @@ if hospitals.empty:
     )
 
 
+# ============================================================
+# Calculate facility-level volume weights
+# ============================================================
+
 hospitals["facility_volume_weight"] = (
     hospitals["base_volume_weight"]
     * hospitals["capacity_factor"]
@@ -67,7 +83,13 @@ if (
 print("✓ Hospital volume weights calculated.")
 
 
+# ============================================================
+# Helper functions
+# ============================================================
+
 def random_timestamp(start, end):
+    """Generate a random timestamp between two dates."""
+
     total_seconds = int(
         (end - start).total_seconds()
     )
@@ -82,7 +104,90 @@ def random_timestamp(start, end):
     )
 
 
+def calculate_time_of_day_factor(hour):
+    """
+    Synthetic patient-demand multiplier by hour.
+
+    Higher values represent periods of higher expected demand.
+    These are simulation assumptions, not real hospital statistics.
+    """
+
+    hourly_factors = {
+        0: 0.55,
+        1: 0.50,
+        2: 0.45,
+        3: 0.45,
+        4: 0.50,
+        5: 0.55,
+        6: 0.65,
+        7: 0.80,
+        8: 0.95,
+        9: 1.05,
+        10: 1.10,
+        11: 1.15,
+        12: 1.20,
+        13: 1.20,
+        14: 1.15,
+        15: 1.10,
+        16: 1.15,
+        17: 1.25,
+        18: 1.30,
+        19: 1.25,
+        20: 1.15,
+        21: 1.00,
+        22: 0.85,
+        23: 0.70,
+    }
+
+    return hourly_factors[hour]
+
+
+def calculate_weekday_factor(timestamp):
+    """
+    Synthetic weekday/weekend demand multiplier.
+
+    Monday-Friday receive slightly higher demand.
+    """
+
+    weekday = timestamp.weekday()
+
+    if weekday < 5:
+        return 1.05
+
+    return 0.90
+
+
+def calculate_month_factor(month):
+    """
+    Synthetic seasonal demand multiplier.
+
+    Winter months receive slightly higher demand.
+    These are simulation assumptions.
+    """
+
+    monthly_factors = {
+        1: 1.12,
+        2: 1.08,
+        3: 1.00,
+        4: 0.96,
+        5: 0.94,
+        6: 0.92,
+        7: 0.94,
+        8: 0.96,
+        9: 0.98,
+        10: 1.00,
+        11: 1.05,
+        12: 1.10,
+    }
+
+    return monthly_factors[month]
+
+
 def choose_department():
+    """
+    Choose a department using synthetic demand proportions.
+    """
+
     departments = [
         "Emergency Department",
         "General Medicine",
@@ -109,7 +214,20 @@ def choose_department():
 
 
 def choose_triage_level():
-    levels = [1, 2, 3, 4, 5]
+    """
+    Triage levels:
+
+    1 = most urgent
+    5 = least urgent
+    """
+
+    levels = [
+        1,
+        2,
+        3,
+        4,
+        5,
+    ]
 
     weights = [
         0.03,
@@ -127,6 +245,10 @@ def choose_triage_level():
 
 
 def calculate_staffing(timestamp, department):
+    """
+    Generate synthetic staffing based on department and time.
+    """
+
     hour = timestamp.hour
 
     if department == "ICU":
@@ -152,7 +274,10 @@ def calculate_staffing(timestamp, department):
 
     staffing = base_staff + variation
 
-    return max(staffing, 2)
+    return max(
+        staffing,
+        2,
+    )
 
 
 def calculate_wait_time(
@@ -161,6 +286,10 @@ def calculate_wait_time(
     staffing_level,
     timestamp,
 ):
+    """
+    Generate synthetic provider wait time.
+    """
+
     if triage_level == 1:
         base_wait = random.randint(2, 10)
 
@@ -191,13 +320,20 @@ def calculate_wait_time(
     if 17 <= timestamp.hour < 23:
         base_wait += random.randint(0, 15)
 
-    return max(1, base_wait)
+    return max(
+        1,
+        base_wait,
+    )
 
 
 def choose_admission(
     department,
     triage_level,
 ):
+    """
+    Determine whether the patient is admitted.
+    """
+
     probability = 0.20
 
     if department == "ICU":
@@ -227,7 +363,12 @@ def choose_admission(
 
 
 def choose_disposition(admission_flag):
+    """
+    Choose a synthetic discharge disposition.
+    """
+
     if admission_flag:
+
         choices = [
             "Home",
             "Skilled Nursing Facility",
@@ -243,6 +384,7 @@ def choose_disposition(admission_flag):
         ]
 
     else:
+
         choices = [
             "Home",
             "Transfer",
@@ -267,23 +409,62 @@ def calculate_length_of_stay(
     department,
     triage_level,
 ):
+    """
+    Generate synthetic length of stay in minutes.
+    """
+
     if not admission_flag:
-        return random.randint(60, 480)
+        return random.randint(
+            60,
+            480,
+        )
 
     if department == "ICU":
-        return random.randint(2880, 10080)
+        return random.randint(
+            2880,
+            10080,
+        )
 
     if department == "Surgery":
-        return random.randint(1440, 7200)
+        return random.randint(
+            1440,
+            7200,
+        )
 
     if department == "Cardiology":
-        return random.randint(1440, 5760)
+        return random.randint(
+            1440,
+            5760,
+        )
 
     if triage_level <= 2:
-        return random.randint(1440, 5760)
+        return random.randint(
+            1440,
+            5760,
+        )
 
-    return random.randint(720, 4320)
+    return random.randint(
+        720,
+        4320,
+    )
 
+
+# ============================================================
+# Prepare hospital selection
+# ============================================================
+
+hospital_records = hospitals.to_dict(
+    "records"
+)
+
+hospital_weights = hospitals[
+    "facility_volume_weight"
+].tolist()
+
+
+# ============================================================
+# Generate encounters
+# ============================================================
 
 print(
     f"Generating {NUM_ENCOUNTERS:,} synthetic encounters..."
@@ -291,17 +472,14 @@ print(
 
 records = []
 
-hospital_records = hospitals.to_dict("records")
-
-hospital_weights = hospitals[
-    "facility_volume_weight"
-].tolist()
+generated = 0
 
 
-for i in range(
-    1,
-    NUM_ENCOUNTERS + 1,
-):
+while generated < NUM_ENCOUNTERS:
+
+    # --------------------------------------------------------
+    # Select a hospital using synthetic volume weighting
+    # --------------------------------------------------------
 
     hospital = random.choices(
         hospital_records,
@@ -309,26 +487,99 @@ for i in range(
         k=1,
     )[0]
 
-    facility_id = hospital["facility_id"]
+    facility_id = hospital[
+        "facility_id"
+    ]
 
-    patient_id = (
-        f"SYN-PAT-"
-        f"{random.randint(1, 50_000):06d}"
-    )
+
+    # --------------------------------------------------------
+    # Generate arrival timestamp
+    # --------------------------------------------------------
 
     arrival_time = random_timestamp(
         START_DATE,
         END_DATE,
     )
 
+
+    # --------------------------------------------------------
+    # Department
+    # --------------------------------------------------------
+
     department = choose_department()
 
+
+    # --------------------------------------------------------
+    # Emergency-service validation
+    # --------------------------------------------------------
+
+    # Hospitals without emergency services should not receive
+    # synthetic Emergency Department encounters.
+
+    if (
+        department == "Emergency Department"
+        and not hospital["emergency_services"]
+    ):
+        continue
+
+
+    # --------------------------------------------------------
+    # Demand factors
+    # --------------------------------------------------------
+
+    time_factor = calculate_time_of_day_factor(
+        arrival_time.hour
+    )
+
+    weekday_factor = calculate_weekday_factor(
+        arrival_time
+    )
+
+    month_factor = calculate_month_factor(
+        arrival_time.month
+    )
+
+
+    # --------------------------------------------------------
+    # Probabilistic demand filter
+    # --------------------------------------------------------
+
+    demand_factor = (
+        time_factor
+        * weekday_factor
+        * month_factor
+    )
+
+    # Normalize around approximately 1.0.
+    acceptance_probability = min(
+        demand_factor / 1.30,
+        1.0,
+    )
+
+    if random.random() > acceptance_probability:
+        continue
+
+
+    # --------------------------------------------------------
+    # Triage
+    # --------------------------------------------------------
+
     triage_level = choose_triage_level()
+
+
+    # --------------------------------------------------------
+    # Staffing
+    # --------------------------------------------------------
 
     staffing_level = calculate_staffing(
         arrival_time,
         department,
     )
+
+
+    # --------------------------------------------------------
+    # Wait time
+    # --------------------------------------------------------
 
     wait_time_minutes = calculate_wait_time(
         department,
@@ -337,6 +588,7 @@ for i in range(
         arrival_time,
     )
 
+
     provider_seen_time = (
         arrival_time
         + timedelta(
@@ -344,12 +596,23 @@ for i in range(
         )
     )
 
+
+    # --------------------------------------------------------
+    # Admission
+    # --------------------------------------------------------
+
     admission_flag = choose_admission(
         department,
         triage_level,
     )
 
+
+    # --------------------------------------------------------
+    # Bed assignment
+    # --------------------------------------------------------
+
     if admission_flag:
+
         bed_assignment_delay = random.randint(
             10,
             180,
@@ -363,7 +626,13 @@ for i in range(
         )
 
     else:
+
         bed_assigned_time = None
+
+
+    # --------------------------------------------------------
+    # Length of stay
+    # --------------------------------------------------------
 
     length_of_stay_minutes = (
         calculate_length_of_stay(
@@ -373,6 +642,7 @@ for i in range(
         )
     )
 
+
     discharge_time = (
         arrival_time
         + timedelta(
@@ -380,9 +650,31 @@ for i in range(
         )
     )
 
-    discharge_disposition = choose_disposition(
-        admission_flag
+
+    # --------------------------------------------------------
+    # Discharge disposition
+    # --------------------------------------------------------
+
+    discharge_disposition = (
+        choose_disposition(
+            admission_flag
+        )
     )
+
+
+    # --------------------------------------------------------
+    # Patient ID
+    # --------------------------------------------------------
+
+    patient_id = (
+        f"SYN-PAT-"
+        f"{random.randint(1, 50_000):06d}"
+    )
+
+
+    # --------------------------------------------------------
+    # Store encounter
+    # --------------------------------------------------------
 
     records.append(
         {
@@ -402,24 +694,50 @@ for i in range(
         }
     )
 
-    if i % 10_000 == 0:
+
+    generated += 1
+
+
+    if generated % 10_000 == 0:
+
         print(
-            f"  Generated {i:,} encounters..."
+            f"  Generated {generated:,} encounters..."
         )
 
 
-df = pd.DataFrame(records)
+# ============================================================
+# Create DataFrame
+# ============================================================
+
+df = pd.DataFrame(
+    records
+)
 
 print()
-print("Synthetic dataset created.")
-print(f"Rows: {len(df):,}")
-print(f"Columns: {len(df.columns)}")
+print(
+    "Synthetic dataset created."
+)
 
+print(
+    f"Rows: {len(df):,}"
+)
+
+print(
+    f"Columns: {len(df.columns)}"
+)
+
+
+# ============================================================
+# Data-quality validation
+# ============================================================
 
 print()
-print("Running data-quality checks...")
+print(
+    "Running data-quality checks..."
+)
 
 
+# Facility IDs must exist.
 valid_facilities = set(
     hospitals["facility_id"]
 )
@@ -439,6 +757,7 @@ print(
 )
 
 
+# Triage validation.
 if not df[
     "triage_level"
 ].between(
@@ -450,9 +769,12 @@ if not df[
         "Invalid triage level detected."
     )
 
-print("✓ Triage levels are valid.")
+print(
+    "✓ Triage levels are valid."
+)
 
 
+# Wait-time validation.
 if (
     df["wait_time_minutes"] < 0
 ).any():
@@ -461,20 +783,26 @@ if (
         "Negative wait time detected."
     )
 
-print("✓ Wait times are valid.")
+print(
+    "✓ Wait times are valid."
+)
 
 
+# Length-of-stay validation.
 if (
     df["length_of_stay_minutes"] < 0
 ).any():
 
     raise ValueError(
-        "Negative length of stay detected."
+        "Negative length-of-stay detected."
     )
 
-print("✓ Length-of-stay values are valid.")
+print(
+    "✓ Length-of-stay values are valid."
+)
 
 
+# Provider timestamp validation.
 if not (
     df["provider_seen_time"]
     >= df["arrival_time"]
@@ -484,9 +812,12 @@ if not (
         "Provider timestamp occurs before arrival."
     )
 
-print("✓ Provider timestamps are valid.")
+print(
+    "✓ Provider timestamps are valid."
+)
 
 
+# Discharge timestamp validation.
 if not (
     df["discharge_time"]
     >= df["arrival_time"]
@@ -496,11 +827,50 @@ if not (
         "Discharge timestamp occurs before arrival."
     )
 
-print("✓ Discharge timestamps are valid.")
+print(
+    "✓ Discharge timestamps are valid."
+)
 
+
+# Emergency-service validation.
+ed_without_service = df[
+    df["department"] == "Emergency Department"
+].merge(
+    hospitals[
+        [
+            "facility_id",
+            "emergency_services",
+        ]
+    ],
+    on="facility_id",
+    how="left",
+)
+
+if (
+    ~ed_without_service[
+        "emergency_services"
+    ]
+).any():
+
+    raise ValueError(
+        "Emergency Department encounter "
+        "assigned to hospital without "
+        "emergency services."
+    )
+
+print(
+    "✓ Emergency-service rules are valid."
+)
+
+
+# ============================================================
+# Load into PostgreSQL
+# ============================================================
 
 print()
-print("Loading encounters into PostgreSQL...")
+print(
+    "Loading encounters into PostgreSQL..."
+)
 
 
 with engine.begin() as connection:
@@ -520,6 +890,10 @@ with engine.begin() as connection:
         method="multi",
     )
 
+
+# ============================================================
+# Final validation
+# ============================================================
 
 with engine.connect() as connection:
 

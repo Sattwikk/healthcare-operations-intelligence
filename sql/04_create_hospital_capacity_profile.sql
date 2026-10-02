@@ -78,18 +78,26 @@ SELECT
         ELSE 0.50
     END AS base_volume_weight,
 
-    -- Synthetic facility-specific variation.
-    -- This is NOT a real-world hospital capacity measurement.
-    ROUND(
-        (
-            0.80
-            + (
-                (ASCII(SUBSTRING(facility_id, 1, 1)) % 41)
-                / 100.0
-            )
-        )::numeric,
-        2
-    ) AS capacity_factor
+   -- Synthetic facility-specific variation.
+-- This is NOT a real-world hospital capacity measurement.
+ROUND(
+    (
+        0.50
+        + (
+            (
+                (
+                    ASCII(SUBSTRING(facility_id, 1, 1))
+                    + ASCII(SUBSTRING(facility_id, 2, 1))
+                    + ASCII(SUBSTRING(facility_id, 3, 1))
+                    + ASCII(SUBSTRING(facility_id, 4, 1))
+                    + ASCII(SUBSTRING(facility_id, 5, 1))
+                    + ASCII(SUBSTRING(facility_id, 6, 1))
+                ) % 151
+            ) / 100.0
+        )
+    )::numeric,
+    2
+) AS capacity_factor
 
 FROM hospitals;
 
